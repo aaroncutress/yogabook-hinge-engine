@@ -19,7 +19,7 @@ This utility bypasses proprietary drivers to provide a clean Web UI, a WebSocket
 
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/aaroncutress/yogabook-hinge-engine.git](https://github.com/aaroncutress/yogabook-hinge-engine.git)
+   git clone https://github.com/aaroncutress/yogabook-hinge-engine.git
    cd yogabook-hinge-engine
    ```
 
