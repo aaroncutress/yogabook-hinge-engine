@@ -3,7 +3,6 @@ import math
 import json
 import os
 from dotenv import load_dotenv
-import winsound
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Security, HTTPException, status, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -12,6 +11,8 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from winrt.windows.devices.sensors import Accelerometer
 from winrt.windows.devices.enumeration import DeviceInformation
+
+from calibration import run_calibration
 
 load_dotenv()
 
@@ -28,6 +29,7 @@ class HingeEngine:
         self.is_calibrating = False
         self.trigger_calibration = False
         self.restart_event = asyncio.Event()
+        self.cancel_event = asyncio.Event()
         
         self.base_id = None
         self.lid_id = None
@@ -64,56 +66,6 @@ async def list_accelerometers():
     devices = await DeviceInformation.find_all_async_aqs_filter_and_additional_properties(selector, [])
     return [{"id": d.id, "name": d.name} for d in devices]
 
-async def get_raw_reading(accel_base, accel_lid):
-    rb, rl = accel_base.get_current_reading(), accel_lid.get_current_reading()
-    if rb and rl:
-        a_b = math.atan2(rb.acceleration_y, rb.acceleration_z)
-        a_l = math.atan2(rl.acceleration_y, rl.acceleration_z)
-        
-        raw_diff = math.degrees(a_l - a_b)
-        # Apply the 180 physical offset and invert the direction
-        normalized = (360 - ((raw_diff + 180 + 360) % 360)) % 360
-        return normalized
-    return None
-
-async def calibrate_task(accel_base, accel_lid):
-    engine.is_calibrating = True
-    print("\n[CALIBRATION STARTED via Web]")
-    
-    async def capture_step(target):
-        winsound.Beep(1000, 500)
-        for _ in range(5):
-            winsound.Beep(1200, 100)
-            await asyncio.sleep(1)
-            
-        winsound.Beep(2000, 200) # Measuring tone
-        total, count = 0, 0
-        for _ in range(50):
-            val = await get_raw_reading(accel_base, accel_lid)
-            if val is not None:
-                total += val
-                count += 1
-            await asyncio.sleep(0.02)
-            
-        winsound.Beep(2500, 300) # Success tone
-        return total / count if count > 0 else 0
-
-    p1_raw = await capture_step(180) # Flat
-    await asyncio.sleep(1)           
-    p2_raw = await capture_step(360) # Tablet
-
-    try:
-        m = 180.0 / (p2_raw - p1_raw)
-        c = 180.0 - (m * p1_raw)
-        engine.slope, engine.intercept = m, c
-        engine.save_config()
-        winsound.Beep(2000, 100); winsound.Beep(2500, 400) 
-        print(f"[!] Calibration Saved: Slope {m:.3f}, Int {c:.3f}")
-    except ZeroDivisionError:
-        print("[!] Calibration failed: No movement detected.")
-    
-    engine.is_calibrating = False
-
 async def sensor_worker():
     while True:
         if not engine.base_id or not engine.lid_id:
@@ -135,7 +87,22 @@ async def sensor_worker():
         while not engine.restart_event.is_set():
             if engine.trigger_calibration:
                 engine.trigger_calibration = False
-                await calibrate_task(accel_base, accel_lid)
+                engine.is_calibrating = True
+                engine.cancel_event.clear() # Reset the abort flag
+                
+                # Execute the external calibration script with the kill switch
+                new_slope, new_intercept = await run_calibration(accel_base, accel_lid, engine.cancel_event)
+                
+                if new_slope is not None:
+                    engine.slope, engine.intercept = new_slope, new_intercept
+                    engine.save_config()
+                    print(f"[!] Calibration Saved: Slope {new_slope:.3f}, Int {new_intercept:.3f}")
+                elif engine.cancel_event.is_set():
+                    print("[!] Calibration Aborted by User.")
+                else:
+                    print("[!] Calibration failed: No movement detected.")
+                    
+                engine.is_calibrating = False
 
             if not engine.is_calibrating:
                 rb, rl = accel_base.get_current_reading(), accel_lid.get_current_reading()
@@ -145,10 +112,10 @@ async def sensor_worker():
                         fl[i] = (ALPHA * getattr(rl, f"acceleration_{c}")) + ((1-ALPHA)*fl[i])
 
                     raw_diff = math.degrees(math.atan2(fl[1], fl[2]) - math.atan2(fb[1], fb[2]))
-                    # 1. Base Hardware Normalization
+                    # Base Hardware Normalization
                     normalized_raw = (360 - ((raw_diff + 180 + 360) % 360)) % 360
                     
-                    # 2. Apply your custom 2-Point Calibration
+                    # Apply your custom 2-Point Calibration
                     final = ((engine.slope * normalized_raw) + engine.intercept) % 360
                     
                     if final < 4.0 or final > 356.0: final = 0.0 if final < 180 else 360.0
@@ -169,7 +136,6 @@ templates = Jinja2Templates(directory=".")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
 async def verify_api_key(api_key: str = Security(api_key_header)):
-    # Ignore API key if not set
     if API_KEY is None:
         return True
     
@@ -216,9 +182,31 @@ async def trigger_calibrate():
     engine.trigger_calibration = True
     return {"status": "started"}
 
+@app.post("/api/cancel_calibration", dependencies=[Depends(verify_api_key)])
+async def cancel_calibration():
+    """Fires the abort event to stop an active calibration."""
+    engine.cancel_event.set()
+    return {"status": "aborted"}
+
+@app.post("/api/reset_calibration", dependencies=[Depends(verify_api_key)])
+async def reset_calibration():
+    """Resets the math to standard 1:1 scaling (Factory Default)."""
+    engine.slope = 1.0
+    engine.intercept = 0.0
+    engine.save_config()
+    return {"status": "reset"}
+
+@app.post("/api/reset_sensors", dependencies=[Depends(verify_api_key)])
+async def reset_sensors():
+    """Clears manual sensor assignments to trigger auto-discovery."""
+    engine.base_id = None
+    engine.lid_id = None
+    engine.save_config()
+    engine.restart_event.set()
+    return {"status": "reset"}
+
 @app.get("/api/angle")
 async def get_current_angle():
-    """One-time poll for the current hinge state."""
     return {
         "angle": engine.angle,
         "mode": engine.mode,
@@ -240,7 +228,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
-    # This injects the API_KEY variable into your index.html
     return templates.TemplateResponse(request, "index.html", {
         "api_key": API_KEY
     })

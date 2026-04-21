@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yoga Book 9i Hinge Utility</title>
+    <title>Yoga Book 9i Hinge Engine</title>
     <style>
         body {
             font-family: system-ui, sans-serif;
@@ -196,12 +196,14 @@
 
 <body>
     <div class="card">
-        <h2>Hinge Engine</h2>
+        <h2>Yoga Book 9i Hinge Engine</h2>
         <div id="status"></div>
         <div id="angle">0.0&deg;</div>
         <div id="mode">Connecting...</div>
 
-        <button onclick="showModal()">Start 2-Point Calibration</button>
+        <button id="startCalibBtn" onclick="showModal()">Start 2-Point Calibration</button>
+        <button id="abortCalibBtn" onclick="abortCalibration()"
+            style="display: none; background: #ff4444; color: #fff;">Abort Calibration</button>
         <button class="secondary" onclick="swapDevices()">Swap Base / Lid</button>
 
         <details class="advanced-config">
@@ -217,6 +219,12 @@
                 <select id="lidSelect"></select>
 
                 <button class="secondary" onclick="saveSensors()" style="margin-top: 10px;">Save Overrides</button>
+                <hr style="border: 0; border-top: 1px solid #444; margin: 15px 0;">
+                <button class="secondary" onclick="resetCalibration()" style="background: #600; color: #fff;">
+                    Reset Calibration Defaults
+                </button>
+                <button class="secondary" onclick="resetSensors()"
+                    style="margin-top: 10px; background: #600; color: #fff;">Clear Sensor Overrides</button>
             </div>
         </details>
     </div>
@@ -224,18 +232,25 @@
     <div id="calibModal" class="modal-overlay">
         <div class="modal-content">
             <h3>Calibration Guide</h3>
-            <p style="opacity: 0.8; font-size: 14px;">To accurately map your sensors, the system needs to measure two
-                physical anchors.</p>
+            <p style="opacity: 0.8; font-size: 14px; line-height: 1.5;">
+                This process calculates the specific hardware bias of your chassis. During the <strong>"Hold
+                    steady"</strong> phase, the engine captures 50 high-frequency gravitational vector samples to
+                average out micro-vibrations and establish a perfect baseline.
+            </p>
             <ol>
-                <li><b>Flat (180&deg;)</b>: Open the laptop completely flat on a table.</li>
-                <li><b>Tablet (360&deg;)</b>: Fold the screen all the way back.</li>
+                <li><b>Step 1: Flat (180&deg;)</b> - Open the laptop completely flat on a table.</li>
+                <li><b>Step 2: Tablet (360&deg;)</b> - Fold the screen all the way back.</li>
             </ol>
-            <p style="color: #ffaa00; font-size: 14px; font-weight: bold; margin-bottom: 0;">
-                ⚠️ Ensure your volume is up!
+
+            <p style="color: #00ffcc; font-size: 13px; font-weight: bold; margin-bottom: 0;">
+                🎵 Audio Legend:
             </p>
-            <p style="font-size: 13px; opacity: 0.7; margin-top: 5px;">
-                Audio beeps will tell you when to move the lid and when to hold it steady.
-            </p>
+            <ul style="font-size: 13px; opacity: 0.8; margin-top: 5px; padding-left: 20px;">
+                <li><b>Rising Chords:</b> Step is starting.</li>
+                <li><b>Single Blips:</b> 5-second countdown.</li>
+                <li><b>Solid Tone:</b> Active sampling (Hold perfectly still for 1 second).</li>
+                <li><b>Victory Melody:</b> Calibration successfully saved!</li>
+            </ul>
 
             <div class="button-row">
                 <button class="secondary" onclick="hideModal()">Cancel</button>
@@ -254,11 +269,19 @@
             if (data.calibrating) {
                 document.getElementById('status').innerText = "CALIBRATING... Listen to audio cues.";
                 document.getElementById('angle').style.opacity = "0.2";
+
+                // Toggle Buttons
+                document.getElementById('startCalibBtn').style.display = 'none';
+                document.getElementById('abortCalibBtn').style.display = 'block';
             } else {
                 document.getElementById('status').innerText = "";
                 document.getElementById('angle').style.opacity = "1";
                 document.getElementById('angle').innerText = data.angle.toFixed(1) + '°';
                 document.getElementById('mode').innerText = data.mode;
+
+                // Toggle Buttons
+                document.getElementById('startCalibBtn').style.display = 'block';
+                document.getElementById('abortCalibBtn').style.display = 'none';
             }
         };
 
@@ -308,6 +331,27 @@
         async function confirmCalibration() {
             hideModal();
             await fetch('/api/calibrate', { method: 'POST', headers: { 'X-API-Key': API_KEY } });
+        }
+
+        async function abortCalibration() {
+            await fetch('/api/cancel_calibration', { method: 'POST', headers: { 'X-API-Key': API_KEY } });
+        }
+
+        async function resetCalibration() {
+            if (confirm("Are you sure you want to reset the hinge calibration to factory defaults?")) {
+                await fetch('/api/reset_calibration', { method: 'POST', headers: { 'X-API-Key': API_KEY } });
+                alert("Calibration reset.");
+            }
+        }
+
+        async function resetSensors() {
+            if (confirm("Are you sure you want to clear manual sensor assignments and return to auto-discovery?")) {
+                await fetch('/api/reset_sensors', { method: 'POST', headers: { 'X-API-Key': API_KEY } });
+                alert("Sensor overrides cleared. Re-running auto-discovery.");
+
+                // Wait 2 seconds before refreshing the dropdowns so the backend has time to auto-discover
+                setTimeout(loadSensors, 2000);
+            }
         }
 
         // Init
