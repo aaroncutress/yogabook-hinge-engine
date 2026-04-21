@@ -177,6 +177,15 @@ async def set_sensors(data: ManualSensorAssign):
     engine.restart_event.set()
     return {"status": "updated"}
 
+@app.post("/api/reset_sensors", dependencies=[Depends(verify_api_key)])
+async def reset_sensors():
+    """Clears manual sensor assignments to trigger auto-discovery."""
+    engine.base_id = None
+    engine.lid_id = None
+    engine.save_config()
+    engine.restart_event.set()
+    return {"status": "reset"}
+
 @app.post("/api/calibrate", dependencies=[Depends(verify_api_key)])
 async def trigger_calibrate():
     engine.trigger_calibration = True
@@ -194,15 +203,6 @@ async def reset_calibration():
     engine.slope = 1.0
     engine.intercept = 0.0
     engine.save_config()
-    return {"status": "reset"}
-
-@app.post("/api/reset_sensors", dependencies=[Depends(verify_api_key)])
-async def reset_sensors():
-    """Clears manual sensor assignments to trigger auto-discovery."""
-    engine.base_id = None
-    engine.lid_id = None
-    engine.save_config()
-    engine.restart_event.set()
     return {"status": "reset"}
 
 @app.get("/api/angle")

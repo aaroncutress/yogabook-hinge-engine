@@ -69,7 +69,10 @@ Pushes live hinge data at 20Hz.
 * **`GET /api/angle`** (Public): One-time poll of the current state.
 * **`GET /api/sensors`** (Protected): Lists available accelerometer hardware IDs.
 * **`POST /api/calibrate`** (Protected): Triggers the audio-assisted calibration sequence.
+* **`POST /api/cancel_calibration`** (Protected): Cancels the audio-assisted calibration sequence.
+* **`POST /api/reset_calibration`** (Protected): Resets the calibration data to default values.
 * **`POST /api/swap`** (Protected): Flips the active Base and Lid sensors.
 * **`POST /api/set_sensors`** (Protected): Manually assigns the Base and Lid sensor IDs.
+* **`POST /api/reset_sensors`** (Protected): Clears manual sensor assignments to trigger auto-discovery.
 
 *Protected routes require the `X-API-Key` header matching your `.env` file. If no `API_KEY` is set in the environment, these routes become publicly accessible.*
