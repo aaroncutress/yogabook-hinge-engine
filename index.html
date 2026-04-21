@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yoga Book 9i Hinge Utility</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            background: #111;
+            color: #eee;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .card {
+            background: #222;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        #angle {
+            font-size: 80px;
+            font-weight: bold;
+            color: #00ffcc;
+            margin: 10px 0;
+            transition: opacity 0.3s;
+        }
+
+        #mode {
+            font-size: 24px;
+            opacity: 0.7;
+            margin-bottom: 20px;
+        }
+
+        #status {
+            color: #ffaa00;
+            font-weight: bold;
+            height: 20px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #00ffcc;
+            color: #111;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #00ccaa;
+        }
+
+        button.secondary {
+            background: #444;
+            color: #eee;
+        }
+
+        button.secondary:hover {
+            background: #555;
+        }
+
+        /* Advanced Options Collapsible */
+        details.advanced-config {
+            text-align: left;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        details.advanced-config summary {
+            padding: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #aaa;
+            list-style: none;
+            /* Hide default arrow in some browsers */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        details.advanced-config summary::-webkit-details-marker {
+            display: none;
+        }
+
+        details.advanced-config summary::after {
+            content: "▼";
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+
+        details.advanced-config[open] summary::after {
+            transform: rotate(180deg);
+        }
+
+        .details-content {
+            padding: 0 15px 15px 15px;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: #333;
+            color: #eee;
+            border: 1px solid #555;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            text-overflow: ellipsis;
+        }
+
+        label {
+            font-size: 12px;
+            opacity: 0.8;
+            display: block;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background: #222;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            text-align: left;
+            border: 1px solid #444;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: #00ffcc;
+        }
+
+        .modal-content ol {
+            padding-left: 20px;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+
+        .modal-content li {
+            margin-bottom: 10px;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h2>Hinge Engine</h2>
+        <div id="status"></div>
+        <div id="angle">0.0&deg;</div>
+        <div id="mode">Connecting...</div>
+
+        <button onclick="showModal()">Start 2-Point Calibration</button>
+        <button class="secondary" onclick="swapDevices()">Swap Base / Lid</button>
+
+        <details class="advanced-config">
+            <summary>Advanced Sensor Configuration</summary>
+            <div class="details-content">
+                <p style="font-size:12px; opacity:0.6; margin-top:0;">Manually assign hardware IDs if the angle tracks
+                    backwards or fails to update.</p>
+
+                <label>Base Accelerometer (Keyboard)</label>
+                <select id="baseSelect"></select>
+
+                <label>Lid Accelerometer (Screen)</label>
+                <select id="lidSelect"></select>
+
+                <button class="secondary" onclick="saveSensors()" style="margin-top: 10px;">Save Overrides</button>
+            </div>
+        </details>
+    </div>
+
+    <div id="calibModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Calibration Guide</h3>
+            <p style="opacity: 0.8; font-size: 14px;">To accurately map your sensors, the system needs to measure two
+                physical anchors.</p>
+            <ol>
+                <li><b>Flat (180&deg;)</b>: Open the laptop completely flat on a table.</li>
+                <li><b>Tablet (360&deg;)</b>: Fold the screen all the way back.</li>
+            </ol>
+            <p style="color: #ffaa00; font-size: 14px; font-weight: bold; margin-bottom: 0;">
+                ⚠️ Ensure your volume is up!
+            </p>
+            <p style="font-size: 13px; opacity: 0.7; margin-top: 5px;">
+                Audio beeps will tell you when to move the lid and when to hold it steady.
+            </p>
+
+            <div class="button-row">
+                <button class="secondary" onclick="hideModal()">Cancel</button>
+                <button onclick="confirmCalibration()">Ready, Start!</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = "{{ api_key }}";
+
+        // WebSocket Logic
+        const ws = new WebSocket('ws://' + window.location.host + '/ws/hinge');
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.calibrating) {
+                document.getElementById('status').innerText = "CALIBRATING... Listen to audio cues.";
+                document.getElementById('angle').style.opacity = "0.2";
+            } else {
+                document.getElementById('status').innerText = "";
+                document.getElementById('angle').style.opacity = "1";
+                document.getElementById('angle').innerText = data.angle.toFixed(1) + '°';
+                document.getElementById('mode').innerText = data.mode;
+            }
+        };
+
+        // Modal Control
+        function showModal() {
+            document.getElementById('calibModal').classList.add('show');
+        }
+        function hideModal() {
+            document.getElementById('calibModal').classList.remove('show');
+        }
+
+        // REST API Logic
+        async function loadSensors() {
+            const res = await fetch('/api/sensors', {
+                headers: { 'X-API-Key': API_KEY }
+            });
+            const data = await res.json();
+
+            const baseSel = document.getElementById('baseSelect');
+            const lidSel = document.getElementById('lidSelect');
+            baseSel.innerHTML = ''; lidSel.innerHTML = '';
+
+            data.sensors.forEach((s) => {
+                // Keep the full ID in the value, but let the select box handle the overflow
+                const label = `${s.name} [${s.id}]`;
+                baseSel.add(new Option(label, s.id, false, s.id === data.current_base));
+                lidSel.add(new Option(label, s.id, false, s.id === data.current_lid));
+            });
+        }
+
+        async function swapDevices() {
+            await fetch('/api/swap', { method: 'POST', headers: { 'X-API-Key': API_KEY } });
+            loadSensors();
+        }
+
+        async function saveSensors() {
+            const base_id = document.getElementById('baseSelect').value;
+            const lid_id = document.getElementById('lidSelect').value;
+            await fetch('/api/set_sensors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+                body: JSON.stringify({ base_id, lid_id })
+            });
+            alert("Configuration saved! Sensors restarting.");
+        }
+
+        async function confirmCalibration() {
+            hideModal();
+            await fetch('/api/calibrate', { method: 'POST', headers: { 'X-API-Key': API_KEY } });
+        }
+
+        // Init
+        loadSensors();
+    </script>
+</body>
+
+</html>
